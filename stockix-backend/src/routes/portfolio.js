@@ -1,14 +1,15 @@
 const express   = require("express");
 const router    = express.Router();
 const Portfolio = require("../models/Portfolio");
-const { getQuote } = require("../utils/finnhub");
 
-const USER_ID = "default"; // extend with auth later
+const { getQuote } = require("../utils/dataSource");
+
+
 
 // ── GET /api/portfolio  — fetch all positions with live prices
 router.get("/", async (req, res, next) => {
   try {
-    let portfolio = await Portfolio.findOne({ userId: USER_ID });
+    let portfolio = await Portfolio.findOne({ userId: req.user.id });
     if (!portfolio) return res.json({ positions: [], totalValue: 0, totalCost: 0, totalPnl: 0 });
 
     // Enrich with live quotes
@@ -49,8 +50,8 @@ router.post("/", async (req, res, next) => {
     if (!symbol || !quantity || !avgCost)
       return res.status(400).json({ error: "symbol, quantity and avgCost are required" });
 
-    let portfolio = await Portfolio.findOne({ userId: USER_ID });
-    if (!portfolio) portfolio = new Portfolio({ userId: USER_ID, positions: [] });
+    let portfolio = await Portfolio.findOne({ userId: req.user.id });
+    if (!portfolio) portfolio = new Portfolio({ userId: req.user.id, positions: [] });
 
     // If symbol already exists, update it instead
     const existing = portfolio.positions.find((p) => p.symbol === symbol.toUpperCase());
@@ -72,7 +73,7 @@ router.post("/", async (req, res, next) => {
 // ── PUT /api/portfolio/:symbol  — update quantity or avgCost
 router.put("/:symbol", async (req, res, next) => {
   try {
-    const portfolio = await Portfolio.findOne({ userId: USER_ID });
+    const portfolio = await Portfolio.findOne({ userId: req.user.id });
     if (!portfolio) return res.status(404).json({ error: "Portfolio not found" });
 
     const pos = portfolio.positions.find((p) => p.symbol === req.params.symbol.toUpperCase());
@@ -93,7 +94,7 @@ router.put("/:symbol", async (req, res, next) => {
 // ── DELETE /api/portfolio/:symbol  — remove a position
 router.delete("/:symbol", async (req, res, next) => {
   try {
-    const portfolio = await Portfolio.findOne({ userId: USER_ID });
+    const portfolio = await Portfolio.findOne({ userId: req.user.id });
     if (!portfolio) return res.status(404).json({ error: "Portfolio not found" });
 
     const before = portfolio.positions.length;

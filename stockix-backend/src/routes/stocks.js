@@ -1,7 +1,7 @@
 const express = require("express");
 const router  = express.Router();
 // const { getQuote, getCandles, getNews, searchSymbol, getProfile } = require("../utils/finnhub");
-const { getQuote, getCandles, getNews, searchSymbol, getProfile } = require("../utils/alphaVantage");
+const { getQuote, getCandles, getNews, searchSymbol, getProfile } = require("../utils/dataSource");
 // GET /api/stocks/quote/:symbol
 router.get("/quote/:symbol", async (req, res, next) => {
   try {

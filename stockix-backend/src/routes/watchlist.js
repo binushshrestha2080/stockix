@@ -1,14 +1,14 @@
 const express   = require("express");
 const router    = express.Router();
 const Watchlist = require("../models/Watchlist");
-const { getQuote } = require("../utils/finnhub");
+const { getQuote } = require("../utils/dataSource");
 
-const USER_ID = "default";
+
 
 // ── GET /api/watchlist  — get all items with live prices
 router.get("/", async (req, res, next) => {
   try {
-    let wl = await Watchlist.findOne({ userId: USER_ID });
+    let wl = await Watchlist.findOne({ userId: req.user.id });
     if (!wl) return res.json([]);
 
     const enriched = await Promise.all(
@@ -31,8 +31,8 @@ router.post("/", async (req, res, next) => {
     const { symbol, name, notes } = req.body;
     if (!symbol) return res.status(400).json({ error: "symbol is required" });
 
-    let wl = await Watchlist.findOne({ userId: USER_ID });
-    if (!wl) wl = new Watchlist({ userId: USER_ID, items: [] });
+    let wl = await Watchlist.findOne({ userId: req.user.id });
+    if (!wl) wl = new Watchlist({ userId: req.user.id, items: [] });
 
     const exists = wl.items.find((i) => i.symbol === symbol.toUpperCase());
     if (exists) return res.status(409).json({ error: "Symbol already in watchlist" });
@@ -46,7 +46,7 @@ router.post("/", async (req, res, next) => {
 // ── PUT /api/watchlist/:symbol  — update notes
 router.put("/:symbol", async (req, res, next) => {
   try {
-    const wl = await Watchlist.findOne({ userId: USER_ID });
+    const wl = await Watchlist.findOne({ userId: req.user.id });
     if (!wl) return res.status(404).json({ error: "Watchlist not found" });
 
     const item = wl.items.find((i) => i.symbol === req.params.symbol.toUpperCase());
@@ -62,7 +62,7 @@ router.put("/:symbol", async (req, res, next) => {
 // ── DELETE /api/watchlist/:symbol  — remove symbol
 router.delete("/:symbol", async (req, res, next) => {
   try {
-    const wl = await Watchlist.findOne({ userId: USER_ID });
+    const wl = await Watchlist.findOne({ userId: req.user.id });
     if (!wl) return res.status(404).json({ error: "Watchlist not found" });
 
     wl.items = wl.items.filter((i) => i.symbol !== req.params.symbol.toUpperCase());

@@ -1,7 +1,7 @@
 const express    = require("express");
 const router     = express.Router();
 // const { getCandles } = require("../utils/finnhub");
-const { getCandles } = require("../utils/alphaVantage");
+const { getCandles } = require("../utils/dataSource");
 const { linearRegression, sma, ema, rsi, macd, runFullAnalysis } = require("../algorithms/indicators");
 
 async function fetchClosingPrices(symbol, resolution = "D", days = 200) {

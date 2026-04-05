@@ -1,13 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-interface TickerItem {
-  sym: string;
-  price: string;
-  change: string;
-  up: boolean;
-}
+interface TickerItem { sym: string; price: string; change: string; up: boolean; }
 
 const STOCKS: TickerItem[] = [
   { sym: "AAPL",  price: "213.18", change: "+1.24%", up: true  },
@@ -23,10 +19,17 @@ const STOCKS: TickerItem[] = [
 ];
 
 const FEATURES = [
-  { icon: "📈", bg: "rgba(74,222,128,0.12)",  title: "Real-time Prices",    desc: "Live stock prices with millisecond updates via WebSocket. Never miss a market move."                          },
-  { icon: "💼", bg: "rgba(96,165,250,0.12)",  title: "Portfolio Tracking",  desc: "Monitor your holdings, P&L, and performance across all your positions in one view."                            },
-  { icon: "📊", bg: "rgba(251,191,36,0.12)",  title: "Advanced Charts",     desc: "Interactive candlestick and line charts with technical indicators and custom time ranges."                      },
-  { icon: "🗞️", bg: "rgba(248,113,113,0.12)", title: "Market News",         desc: "Curated financial news and alerts for every stock in your watchlist, updated live."                            },
+  { icon: "📈", bg: "rgba(74,222,128,0.12)",  title: "Real-time Prices",   desc: "Live stock prices with millisecond updates. Never miss a market move."                        },
+  { icon: "💼", bg: "rgba(96,165,250,0.12)",  title: "Portfolio Tracking", desc: "Monitor your holdings, P&L, and performance across all positions in one view."               },
+  { icon: "📊", bg: "rgba(251,191,36,0.12)",  title: "Advanced Charts",    desc: "Interactive candlestick charts with technical indicators and custom time ranges."             },
+  { icon: "🗞️", bg: "rgba(248,113,113,0.12)", title: "Market News",        desc: "Curated financial news and alerts for every stock in your watchlist, updated live."          },
+];
+
+const NAV_LINKS = [
+  { label: "Features",  href: "#features"  },
+  { label: "Markets",   href: "#markets"   },
+  { label: "Portfolio", href: "#portfolio" },
+  { label: "News",      href: "#news"      },
 ];
 
 function LogoIcon() {
@@ -44,6 +47,7 @@ function LogoIcon() {
 }
 
 export default function LandingPage() {
+  const router  = useRouter();
   const [scrolled, setScrolled] = useState(false);
   const doubled = [...STOCKS, ...STOCKS];
 
@@ -65,16 +69,12 @@ export default function LandingPage() {
           to   { transform: translateX(-50%); }
         }
         .ticker-track {
-          display: flex;
-          gap: 40px;
+          display: flex; gap: 40px;
           width: max-content;
           animation: ticker 28s linear infinite;
         }
-
-        .nav-link:hover       { color: #fff !important; }
-        .btn-primary:hover    { opacity: 0.85 !important; }
-        .btn-outline:hover    { border-color: rgba(255,255,255,0.5) !important; color: #fff !important; }
-        .feature-card:hover   { background: rgba(255,255,255,0.07) !important; border-color: rgba(255,255,255,0.16) !important; }
+        .nav-link:hover     { color: #fff !important; }
+        .feature-card:hover { background: rgba(255,255,255,0.07) !important; border-color: rgba(255,255,255,0.16) !important; }
 
         @media (max-width: 900px) {
           .features-grid { grid-template-columns: repeat(2,1fr) !important; }
@@ -105,12 +105,16 @@ export default function LandingPage() {
           </div>
 
           <ul className="nav-links" style={{ display: "flex", gap: 28, listStyle: "none" }}>
-            {["Features","Markets","Portfolio","News"].map(l => (
-              <li key={l}><a href="#" className="nav-link" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none", fontSize: 14, transition: "color 0.2s" }}>{l}</a></li>
+            {NAV_LINKS.map(l => (
+              <li key={l.label}>
+                <a href={l.href} className="nav-link" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none", fontSize: 14, transition: "color 0.2s" }}>
+                  {l.label}
+                </a>
+              </li>
             ))}
           </ul>
 
-          <button style={{
+          <button onClick={() => router.push("/auth")} style={{
             background: "#fff", color: "#0d0d0d", border: "none",
             padding: "9px 20px", borderRadius: 6, fontSize: 13, fontWeight: 600,
             cursor: "pointer", letterSpacing: 0.5, transition: "opacity 0.2s",
@@ -151,20 +155,27 @@ export default function LandingPage() {
           </h1>
 
           <p style={{ fontSize: 18, color: "rgba(255,255,255,0.55)", lineHeight: 1.7, maxWidth: 560, margin: "0 auto 36px" }}>
-            STOCKIX gives you real-time prices, smart portfolio tracking, and AI-powered insights — all in one clean dashboard.
+            STOCKIX gives you real-time prices, smart portfolio tracking, and algorithm-based insights — all in one clean dashboard.
           </p>
 
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <button className="btn-primary" style={{
+            <button onClick={() => router.push("/auth/register")} style={{
               background: "#fff", color: "#0d0d0d", padding: "13px 28px",
               borderRadius: 8, fontSize: 15, fontWeight: 700, cursor: "pointer",
               border: "none", letterSpacing: 0.3, transition: "opacity 0.2s",
-            }}>Start Tracking Free</button>
-            <button className="btn-outline" style={{
+            }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+            >Get Started Free</button>
+
+            <button onClick={() => router.push("/auth/login")} style={{
               background: "transparent", color: "rgba(255,255,255,0.8)",
               padding: "13px 28px", borderRadius: 8, fontSize: 15, fontWeight: 500,
               cursor: "pointer", border: "0.5px solid rgba(255,255,255,0.25)", transition: "all 0.2s",
-            }}>View Demo</button>
+            }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.5)"; e.currentTarget.style.color = "#fff"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; e.currentTarget.style.color = "rgba(255,255,255,0.8)"; }}
+            >Sign In</button>
           </div>
         </section>
 
@@ -179,7 +190,7 @@ export default function LandingPage() {
           {[
             { num: "50K+",      label: "Stocks tracked" },
             { num: "Real-time", label: "Market data"     },
-            { num: "10ms",      label: "Update latency"  },
+            { num: "5",         label: "Algorithms"      },
             { num: "100%",      label: "Free to start"   },
           ].map(s => (
             <div key={s.label} style={{ textAlign: "center" }}>
@@ -190,7 +201,7 @@ export default function LandingPage() {
         </div>
 
         {/* FEATURES */}
-        <section style={{ padding: "80px 48px", maxWidth: 1080, margin: "0 auto" }}>
+        <section id="features" style={{ padding: "80px 48px", maxWidth: 1080, margin: "0 auto" }}>
           <p style={{ textAlign: "center", fontSize: 12, letterSpacing: 2, textTransform: "uppercase", color: "rgba(255,255,255,0.35)", marginBottom: 14 }}>
             Everything you need
           </p>
@@ -224,13 +235,24 @@ export default function LandingPage() {
           <p style={{ fontSize: 16, color: "rgba(255,255,255,0.5)", marginBottom: 32 }}>
             Join thousands of investors using STOCKIX to make better decisions.
           </p>
-          <button style={{
-            background: "#fff", color: "#0d0d0d", padding: "15px 36px",
-            borderRadius: 8, fontSize: 16, fontWeight: 700, border: "none", cursor: "pointer", transition: "opacity 0.2s",
-          }}
-            onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-            onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-          >Create Free Account</button>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <button onClick={() => router.push("/auth/register")} style={{
+              background: "#fff", color: "#0d0d0d", padding: "15px 36px",
+              borderRadius: 8, fontSize: 16, fontWeight: 700, border: "none", cursor: "pointer", transition: "opacity 0.2s",
+            }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+            >Create Free Account</button>
+
+            <button onClick={() => router.push("/auth/login")} style={{
+              background: "transparent", color: "rgba(255,255,255,0.8)", padding: "15px 36px",
+              borderRadius: 8, fontSize: 16, fontWeight: 500, cursor: "pointer",
+              border: "0.5px solid rgba(255,255,255,0.25)", transition: "all 0.2s",
+            }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.5)"; e.currentTarget.style.color = "#fff"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; e.currentTarget.style.color = "rgba(255,255,255,0.8)"; }}
+            >Sign In</button>
+          </div>
         </section>
 
         {/* FOOTER */}

@@ -1,41 +1,40 @@
 require("dotenv").config();
 const express = require("express");
-const cors = require("cors");
-const morgan = require("morgan");
+const cors    = require("cors");
+const morgan  = require("morgan");
 const connectDB = require("./utils/db");
+const { requireAuth, requireAdmin } = require("./middleware/auth");
 
+const authRoutes      = require("./routes/auth");
 const stockRoutes     = require("./routes/stocks");
 const portfolioRoutes = require("./routes/portfolio");
 const watchlistRoutes = require("./routes/watchlist");
 const analysisRoutes  = require("./routes/analysis");
+const adminRoutes     = require("./routes/admin");
 
 const app = express();
 
-// ── Middleware ──────────────────────────────────────────────────────────────────
 app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:3000" }));
 app.use(express.json());
 app.use(morgan("dev"));
 
-// ── Database ────────────────────────────────────────────────────────────────────
 connectDB();
 
-// ── Routes ──────────────────────────────────────────────────────────────────────
+app.use("/api/auth",      authRoutes);
 app.use("/api/stocks",    stockRoutes);
-app.use("/api/portfolio", portfolioRoutes);
-app.use("/api/watchlist", watchlistRoutes);
-app.use("/api/analysis",  analysisRoutes);
+app.use("/api/portfolio", requireAuth, portfolioRoutes);
+app.use("/api/watchlist", requireAuth, watchlistRoutes);
+app.use("/api/analysis",  requireAuth, analysisRoutes);
+app.use("/api/admin",     requireAuth, requireAdmin, adminRoutes);
 
-// ── Health check ────────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// ── 404 handler ─────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
 
-// ── Error handler ────────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(err.status || 500).json({ error: err.message || "Internal server error" });
