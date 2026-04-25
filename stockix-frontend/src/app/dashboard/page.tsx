@@ -324,34 +324,297 @@ function WatchlistView({ watchlist, onRefresh }: { watchlist: WatchItem[]; onRef
   );
 }
 
+
 // ─── Analysis View ─────────────────────────────────────────────────────────────
 function AnalysisView({ initialSym = "AAPL" }: { initialSym?: string }) {
-  const [sym, setSym] = useState(initialSym); const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [loading, setLoading] = useState(false); const [error, setError] = useState("");
+  const [sym, setSym]           = useState(initialSym);
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
+
+  // Chart refs
+  const priceRef  = useRef<HTMLCanvasElement>(null);
+  const lrRef     = useRef<HTMLCanvasElement>(null);
+  const rsiRef    = useRef<HTMLCanvasElement>(null);
+  const macdRef   = useRef<HTMLCanvasElement>(null);
+  const chartRefs = useRef<any[]>([]);
+
   const run = async () => {
-    if (!sym) return; setLoading(true); setError(""); setAnalysis(null);
-    try { setAnalysis(await getFullAnalysis(sym.toUpperCase()) as Analysis); } catch (e: any) { setError(e.message); }
+    if (!sym) return;
+    setLoading(true); setError(""); setAnalysis(null);
+    chartRefs.current.forEach(c => c?.destroy());
+    chartRefs.current = [];
+    try {
+      const data = await getFullAnalysis(sym.toUpperCase()) as Analysis;
+      setAnalysis(data);
+      setTimeout(() => renderCharts(data), 100);
+    } catch (e: any) { setError(e.message); }
     setLoading(false);
   };
+
+  const renderCharts = async (data: Analysis) => {
+    const Chart = (await import("chart.js/auto")).default;
+    chartRefs.current.forEach(c => c?.destroy());
+    chartRefs.current = [];
+
+    const gridColor   = "rgba(255,255,255,0.05)";
+    const tickColor   = "rgba(255,255,255,0.35)";
+    const tooltipOpts = {
+      backgroundColor: "#1a1a1a",
+      borderColor: "rgba(255,255,255,0.1)",
+      borderWidth: 1,
+      titleColor: "#fff",
+      bodyColor: "rgba(255,255,255,0.7)",
+    };
+
+    // ── Price chart: SMA + EMA + Linear Regression prediction ──
+    if (priceRef.current && data.sma14 && data.ema12) {
+      const smaData  = data.sma14.series || [];
+      const emaData  = data.ema12.series || [];
+      const labels   = smaData.map((_: any, i: number) => i + 1);
+      const predDays = data.linearRegression?.predictions || [];
+      const predLabels = predDays.map((_: any, i: number) => `P${i + 1}`);
+      const allLabels  = [...labels, ...predLabels];
+      const smaPad     = [...smaData, ...Array(predDays.length).fill(null)];
+      const emaPad     = [...emaData, ...Array(predDays.length).fill(null)];
+      const predPad    = [...Array(smaData.length).fill(null), ...predDays];
+
+      const ctx   = priceRef.current.getContext("2d")!;
+      const chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: allLabels,
+          datasets: [
+            {
+              label: "SMA 14",
+              data: smaPad,
+              borderColor: "#f5c542",
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.3,
+              fill: false,
+            },
+            {
+              label: "EMA 12",
+              data: emaPad,
+              borderColor: "#60a5fa",
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.3,
+              fill: false,
+            },
+            {
+              label: "Prediction (7d)",
+              data: predPad,
+              borderColor: "#4ade80",
+              borderWidth: 2,
+              borderDash: [6, 3],
+              pointRadius: 4,
+              pointBackgroundColor: "#4ade80",
+              tension: 0.3,
+              fill: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { labels: { color: tickColor, boxWidth: 12, font: { size: 11 } } },
+            tooltip: tooltipOpts,
+          },
+          scales: {
+            x: { ticks: { color: tickColor, maxTicksLimit: 12, font: { size: 10 } }, grid: { color: gridColor } },
+            y: { ticks: { color: tickColor, font: { size: 10 } }, grid: { color: gridColor } },
+          },
+        },
+      });
+      chartRefs.current.push(chart);
+    }
+// ── Linear Regression chart ──
+    if (lrRef.current && data.linearRegression?.fittedSeries) {
+      const fitted    = data.linearRegression.fittedSeries;
+      const preds     = data.linearRegression.predictions || [];
+      const allLabels = [...fitted.map((_: any, i: number) => i + 1), ...preds.map((_: any, i: number) => `+${i + 1}d`)];
+      const fittedPad = [...fitted, ...Array(preds.length).fill(null)];
+      const predPad   = [...Array(fitted.length - 1).fill(null), fitted[fitted.length - 1], ...preds];
+      const ctx       = lrRef.current.getContext("2d")!;
+      const chart     = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: allLabels,
+          datasets: [
+            { label: "Regression Line", data: fittedPad, borderColor: "#f5c542", borderWidth: 2, pointRadius: 0, tension: 0, fill: false },
+            { label: "7-Day Prediction", data: predPad, borderColor: "#4ade80", borderWidth: 2, borderDash: [6, 3], pointRadius: 4, pointBackgroundColor: "#4ade80", tension: 0, fill: false },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { labels: { color: tickColor, boxWidth: 12, font: { size: 11 } } },
+            tooltip: tooltipOpts,
+          },
+          scales: {
+            x: { ticks: { color: tickColor, maxTicksLimit: 14, font: { size: 10 } }, grid: { color: gridColor } },
+            y: { ticks: { color: tickColor, font: { size: 10 } }, grid: { color: gridColor } },
+          },
+        },
+      });
+      chartRefs.current.push(chart);
+    }
+
+    // ── RSI chart ──
+    if (rsiRef.current && data.rsi14?.series) {
+      const rsiSeries = data.rsi14.series;
+      const labels    = rsiSeries.map((_: any, i: number) => i + 1);
+      const ctx       = rsiRef.current.getContext("2d")!;
+      const chart     = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "RSI (14)",
+              data: rsiSeries,
+              borderColor: "#a78bfa",
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.3,
+              fill: {
+                target: { value: 70 },
+                above: "rgba(248,113,113,0.1)",
+                below: "rgba(74,222,128,0.05)",
+              },
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: tickColor, boxWidth: 12, font: { size: 11 } } },
+            tooltip: tooltipOpts,
+            annotation: {
+              annotations: {
+                ob: { type: "line", yMin: 70, yMax: 70, borderColor: "rgba(248,113,113,0.5)", borderWidth: 1, borderDash: [4, 4] },
+                os: { type: "line", yMin: 30, yMax: 30, borderColor: "rgba(74,222,128,0.5)",  borderWidth: 1, borderDash: [4, 4] },
+              },
+            },
+          },
+          scales: {
+            x: { ticks: { color: tickColor, maxTicksLimit: 12, font: { size: 10 } }, grid: { color: gridColor } },
+            y: {
+              min: 0, max: 100,
+              ticks: { color: tickColor, font: { size: 10 }, callback: (v: any) => `${v}` },
+              grid: { color: gridColor },
+            },
+          },
+        },
+      });
+      chartRefs.current.push(chart);
+    }
+
+    // ── MACD chart ──
+    if (macdRef.current && data.macd?.macdLine) {
+      const macdLine   = data.macd.macdLine.filter((v: any) => v !== null);
+      const signalLine = data.macd.signalLine.filter((v: any) => v !== null);
+      const histogram  = data.macd.histogram.filter((v: any) => v !== null);
+      const labels     = macdLine.map((_: any, i: number) => i + 1);
+      const ctx        = macdRef.current.getContext("2d")!;
+      const chart      = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Histogram",
+              data: histogram,
+              backgroundColor: histogram.map((v: number) =>
+                v >= 0 ? "rgba(74,222,128,0.6)" : "rgba(248,113,113,0.6)"
+              ),
+              borderRadius: 2,
+              order: 2,
+            },
+            {
+              label: "MACD",
+              data: macdLine,
+              type: "line" as any,
+              borderColor: "#f5c542",
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.3,
+              fill: false,
+              order: 1,
+            },
+            {
+              label: "Signal",
+              data: signalLine,
+              type: "line" as any,
+              borderColor: "#f87171",
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.3,
+              fill: false,
+              order: 0,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { labels: { color: tickColor, boxWidth: 12, font: { size: 11 } } },
+            tooltip: tooltipOpts,
+          },
+          scales: {
+            x: { ticks: { color: tickColor, maxTicksLimit: 12, font: { size: 10 } }, grid: { color: gridColor } },
+            y: { ticks: { color: tickColor, font: { size: 10 } }, grid: { color: gridColor } },
+          },
+        },
+      });
+      chartRefs.current.push(chart);
+    }
+  };
+
+  useEffect(() => {
+    setSym(initialSym);
+  }, [initialSym]);
+
+  useEffect(() => {
+    return () => { chartRefs.current.forEach(c => c?.destroy()); chartRefs.current = []; };
+  }, []);
+
   const algos = analysis ? [
-    { name: "Linear Regression", signal: (analysis.linearRegression?.r2 ?? 0) >= 0.6 ? "bullish" : "neutral", detail: `R² = ${analysis.linearRegression?.r2} | Next 7d: $${analysis.linearRegression?.predictions?.[6]}` },
-    { name: "SMA (14)",          signal: analysis.sma14?.signal ?? "neutral",  detail: `Latest SMA-14: $${analysis.sma14?.latest}` },
-    { name: "EMA (12)",          signal: analysis.sma14?.signal ?? "neutral",  detail: `Latest EMA-12: $${analysis.ema12?.latest}` },
-    { name: "RSI (14)",          signal: analysis.rsi14?.signal ?? "neutral",  detail: `RSI = ${analysis.rsi14?.latest}` },
-    { name: "MACD",              signal: analysis.macd?.signal  ?? "neutral",  detail: `MACD: ${analysis.macd?.latest?.macd?.toFixed(3)} | Signal: ${analysis.macd?.latest?.signal?.toFixed(3)} | Hist: ${analysis.macd?.latest?.histogram?.toFixed(3)}` },
+    { name: "Linear Regression", signal: (analysis.linearRegression?.r2 ?? 0) >= 0.6 ? "bullish" : "neutral", detail: `R² = ${analysis.linearRegression?.r2} | Next 7d: $${analysis.linearRegression?.predictions?.[6]?.toFixed(2)}` },
+    { name: "SMA (14)",  signal: analysis.sma14?.signal ?? "neutral", detail: `Latest: $${analysis.sma14?.latest?.toFixed(2)}` },
+    { name: "EMA (12)",  signal: analysis.sma14?.signal ?? "neutral", detail: `Latest: $${analysis.ema12?.latest?.toFixed(2)}` },
+    { name: "RSI (14)",  signal: analysis.rsi14?.signal ?? "neutral", detail: `RSI = ${analysis.rsi14?.latest?.toFixed(2)}` },
+    { name: "MACD",      signal: analysis.macd?.signal  ?? "neutral", detail: `MACD: ${analysis.macd?.latest?.macd?.toFixed(3)} | Hist: ${analysis.macd?.latest?.histogram?.toFixed(3)}` },
   ] : [];
+
   return (
     <div>
+      {/* Input */}
       <Card style={{ marginBottom: 16 }}>
         <CardTitle>Run analysis</CardTitle>
         <div style={{ display: "flex", gap: 10 }}>
-          <input value={sym} onChange={(e) => setSym(e.target.value)} placeholder="Symbol" onKeyDown={(e) => e.key === "Enter" && run()} style={{ background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "9px 12px", color: "#fff", fontSize: 13, width: 160, outline: "none" }} />
-          <button onClick={run} disabled={loading} style={{ background: "#4ade80", color: "#0d0d0d", border: "none", padding: "9px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{loading ? "Analysing…" : "Analyse"}</button>
+          <input value={sym} onChange={e => setSym(e.target.value)} placeholder="Symbol"
+            onKeyDown={e => e.key === "Enter" && run()}
+            style={{ background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "9px 12px", color: "#fff", fontSize: 13, width: 160, outline: "none" }} />
+          <button onClick={run} disabled={loading}
+            style={{ background: "#4ade80", color: "#0d0d0d", border: "none", padding: "9px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            {loading ? "Analysing…" : "Analyse"}
+          </button>
         </div>
         {error && <div style={{ color: "#f87171", fontSize: 12, marginTop: 8 }}>{error}</div>}
       </Card>
+
       {analysis && (
         <>
+          {/* Overall sentiment */}
           <Card style={{ marginBottom: 16 }}>
             <CardTitle>Overall sentiment — {sym.toUpperCase()}</CardTitle>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -359,174 +622,261 @@ function AnalysisView({ initialSym = "AAPL" }: { initialSym?: string }) {
               <span style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Score: {analysis.sentimentScore > 0 ? "+" : ""}{analysis.sentimentScore}</span>
             </div>
           </Card>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-            {algos.map((a) => (
+
+          {/* Signal cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
+            {algos.map(a => (
               <Card key={a.name}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{a.name}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{a.name}</span>
                   <Badge label={(a.signal || "neutral").replace(/_/g, " ").toUpperCase()} color={a.signal || "neutral"} />
                 </div>
                 <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{a.detail}</div>
               </Card>
             ))}
           </div>
+
+            {/* Linear Regression chart */}
+          <Card style={{ marginBottom: 16 }}>
+            <CardTitle>
+              <span>Linear Regression — Fitted Line <span style={{ color: "#f5c542" }}>●</span> 7-Day Prediction <span style={{ color: "#4ade80" }}>●</span></span>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>R² = {analysis?.linearRegression?.r2}</span>
+            </CardTitle>
+            <div style={{ height: 240 }}><canvas ref={lrRef} /></div>
+          </Card>
+
+          {/* Price chart: SMA + EMA + Prediction */}
+          <Card style={{ marginBottom: 16 }}>
+            <CardTitle>
+              <span>Price Trend — SMA 14 <span style={{ color: "#f5c542" }}>●</span> EMA 12 <span style={{ color: "#60a5fa" }}>●</span> Prediction <span style={{ color: "#4ade80" }}>●</span></span>
+            </CardTitle>
+            <div style={{ height: 280 }}>
+              <canvas ref={priceRef} />
+            </div>
+          </Card>
+
+          {/* RSI chart */}
+          <Card style={{ marginBottom: 16 }}>
+            <CardTitle>
+              <span>RSI (14) <span style={{ color: "#a78bfa" }}>●</span></span>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>Overbought &gt;70 · Oversold &lt;30</span>
+            </CardTitle>
+            <div style={{ height: 180 }}>
+              <canvas ref={rsiRef} />
+            </div>
+          </Card>
+
+          {/* MACD chart */}
+          <Card style={{ marginBottom: 16 }}>
+            <CardTitle>
+              <span>MACD — Line <span style={{ color: "#f5c542" }}>●</span> Signal <span style={{ color: "#f87171" }}>●</span> Histogram</span>
+            </CardTitle>
+            <div style={{ height: 200 }}>
+              <canvas ref={macdRef} />
+            </div>
+          </Card>
         </>
       )}
     </div>
   );
 }
+// function AnalysisView({ initialSym = "AAPL" }: { initialSym?: string }) {
+//   const [sym, setSym] = useState(initialSym); const [analysis, setAnalysis] = useState<Analysis | null>(null);
+//   const [loading, setLoading] = useState(false); const [error, setError] = useState("");
+//   const run = async () => {
+//     if (!sym) return; setLoading(true); setError(""); setAnalysis(null);
+//     try { setAnalysis(await getFullAnalysis(sym.toUpperCase()) as Analysis); } catch (e: any) { setError(e.message); }
+//     setLoading(false);
+//   };
+//   const algos = analysis ? [
+//     { name: "Linear Regression", signal: (analysis.linearRegression?.r2 ?? 0) >= 0.6 ? "bullish" : "neutral", detail: `R² = ${analysis.linearRegression?.r2} | Next 7d: $${analysis.linearRegression?.predictions?.[6]}` },
+//     { name: "SMA (14)",          signal: analysis.sma14?.signal ?? "neutral",  detail: `Latest SMA-14: $${analysis.sma14?.latest}` },
+//     { name: "EMA (12)",          signal: analysis.sma14?.signal ?? "neutral",  detail: `Latest EMA-12: $${analysis.ema12?.latest}` },
+//     { name: "RSI (14)",          signal: analysis.rsi14?.signal ?? "neutral",  detail: `RSI = ${analysis.rsi14?.latest}` },
+//     { name: "MACD",              signal: analysis.macd?.signal  ?? "neutral",  detail: `MACD: ${analysis.macd?.latest?.macd?.toFixed(3)} | Signal: ${analysis.macd?.latest?.signal?.toFixed(3)} | Hist: ${analysis.macd?.latest?.histogram?.toFixed(3)}` },
+//   ] : [];
+//   return (
+//     <div>
+//       <Card style={{ marginBottom: 16 }}>
+//         <CardTitle>Run analysis</CardTitle>
+//         <div style={{ display: "flex", gap: 10 }}>
+//           <input value={sym} onChange={(e) => setSym(e.target.value)} placeholder="Symbol" onKeyDown={(e) => e.key === "Enter" && run()} style={{ background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "9px 12px", color: "#fff", fontSize: 13, width: 160, outline: "none" }} />
+//           <button onClick={run} disabled={loading} style={{ background: "#4ade80", color: "#0d0d0d", border: "none", padding: "9px 20px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{loading ? "Analysing…" : "Analyse"}</button>
+//         </div>
+//         {error && <div style={{ color: "#f87171", fontSize: 12, marginTop: 8 }}>{error}</div>}
+//       </Card>
+//       {analysis && (
+//         <>
+//           <Card style={{ marginBottom: 16 }}>
+//             <CardTitle>Overall sentiment — {sym.toUpperCase()}</CardTitle>
+//             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+//               <Badge label={analysis.overallSentiment.toUpperCase()} color={analysis.overallSentiment} />
+//               <span style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>Score: {analysis.sentimentScore > 0 ? "+" : ""}{analysis.sentimentScore}</span>
+//             </div>
+//           </Card>
+//           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+//             {algos.map((a) => (
+//               <Card key={a.name}>
+//                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+//                   <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{a.name}</span>
+//                   <Badge label={(a.signal || "neutral").replace(/_/g, " ").toUpperCase()} color={a.signal || "neutral"} />
+//                 </div>
+//                 <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{a.detail}</div>
+//               </Card>
+//             ))}
+//           </div>
+//         </>
+//       )}
+//     </div>
+//   );
+// }
 
 // ─── Chart View ────────────────────────────────────────────────────────────────
 function ChartView() {
   const [sym, setSym]         = useState("AAPL");
   const [input, setInput]     = useState("AAPL");
+  const [chartData, setChartData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
   const candleRef             = useRef<HTMLCanvasElement>(null);
   const volumeRef             = useRef<HTMLCanvasElement>(null);
   const chartRefs             = useRef<any[]>([]);
 
-  useEffect(() => { loadChart(); }, [sym]);
-  useEffect(() => {
-    return () => { chartRefs.current.forEach(c => c?.destroy()); chartRefs.current = []; };
-  }, []);
-
-  const loadChart = async () => {
-    if (!sym) return;
-    setLoading(true); setError("");
-    chartRefs.current.forEach(c => c?.destroy()); chartRefs.current = [];
+  const fetchData = async (symbol: string) => {
+    setLoading(true); setError(""); setChartData(null);
     try {
-      const res  = await fetch(`http://localhost:5000/api/stocks/candles/${sym}`, { headers: authHeaders() });
+      const res  = await fetch(`http://localhost:5000/api/stocks/candles/${symbol}`, { headers: authHeaders() });
       const data = await res.json();
-      if (!data || data.s === "no_data" || !data.c || data.c.length === 0) { setError("No chart data available"); setLoading(false); return; }
-
+      if (!data || data.s === "no_data" || !data.c || data.c.length === 0) {
+        setError("No chart data available"); setLoading(false); return;
+      }
       const raw = data.t.map((t: number, i: number) => ({
-        date:   new Date(t * 1000),
-        open:   data.o[i],
-        high:   data.h[i],
-        low:    data.l[i],
-        close:  data.c[i],
-        volume: data.v[i],
+        date: new Date(t * 1000), open: data.o[i], high: data.h[i],
+        low: data.l[i], close: data.c[i], volume: data.v[i],
       }));
-      const candles = raw.slice(-60);
-      const labels  = candles.map((c: any) => c.date.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
-      const closes  = candles.map((c: any) => c.close);
-      const volumes = candles.map((c: any) => c.volume);
-      const sma14   = calcSMA(closes, 14);
-      const ema26   = calcEMA(closes, 26);
-
-      const Chart = (await import("chart.js/auto")).default;
-
-      if (candleRef.current) {
-        const chart = new Chart(candleRef.current.getContext("2d")!, {
-          type: "bar",
-          data: {
-            labels,
-            datasets: [
-              {
-                label: "Price",
-                data: closes,
-                backgroundColor: candles.map((c: any) => c.close >= c.open ? "rgba(74,222,128,0.8)" : "rgba(248,113,113,0.8)"),
-                borderColor:     candles.map((c: any) => c.close >= c.open ? "#4ade80" : "#f87171"),
-                borderWidth: 1, borderRadius: 2,
-              },
-              { label: "SMA 14", data: sma14, type: "line" as any, borderColor: "#f5c542", borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
-              { label: "EMA 26", data: ema26, type: "line" as any, borderColor: "#60a5fa", borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
-            ],
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: "index", intersect: false },
-            plugins: {
-              legend: { labels: { color: "rgba(255,255,255,0.6)", boxWidth: 12, font: { size: 11 } } },
-              tooltip: { backgroundColor: "#1a1a1a", borderColor: "rgba(255,255,255,0.1)", borderWidth: 1, titleColor: "#fff", bodyColor: "rgba(255,255,255,0.7)" },
-            },
-            scales: {
-              x: { ticks: { color: "rgba(255,255,255,0.4)", maxTicksLimit: 10, font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.05)" } },
-              y: { ticks: { color: "rgba(255,255,255,0.4)", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.05)" } },
-            },
-          },
-        });
-        chartRefs.current.push(chart);
-      }
-
-      if (volumeRef.current) {
-        const chart = new Chart(volumeRef.current.getContext("2d")!, {
-          type: "bar",
-          data: {
-            labels,
-            datasets: [{
-              label: "Volume",
-              data: volumes,
-              backgroundColor: candles.map((c: any) => c.close >= c.open ? "rgba(74,222,128,0.4)" : "rgba(248,113,113,0.4)"),
-              borderRadius: 2,
-            }],
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: {
-              legend: { labels: { color: "rgba(255,255,255,0.6)", boxWidth: 12, font: { size: 11 } } },
-              tooltip: { backgroundColor: "#1a1a1a", borderColor: "rgba(255,255,255,0.1)", borderWidth: 1, titleColor: "#fff", bodyColor: "rgba(255,255,255,0.7)", callbacks: { label: (ctx) => `Volume: ${Number(ctx.raw).toLocaleString()}` } },
-            },
-            scales: {
-              x: { ticks: { color: "rgba(255,255,255,0.4)", maxTicksLimit: 10, font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.05)" } },
-              y: { ticks: { color: "rgba(255,255,255,0.4)", font: { size: 10 }, callback: (v: any) => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : v }, grid: { color: "rgba(255,255,255,0.05)" } },
-            },
-          },
-        });
-        chartRefs.current.push(chart);
-      }
+      setChartData({ candles: raw.slice(-60), symbol });
     } catch { setError("Failed to load chart data"); }
     setLoading(false);
   };
+
+  useEffect(() => { fetchData(sym); }, [sym]);
+
+  useEffect(() => {
+    if (!chartData || !candleRef.current || !volumeRef.current) return;
+
+    chartRefs.current.forEach(c => { try { c?.destroy(); } catch {} });
+    chartRefs.current = [];
+
+    const { candles } = chartData;
+    const labels  = candles.map((c: any) => c.date.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+    const closes  = candles.map((c: any) => c.close);
+    const volumes = candles.map((c: any) => c.volume);
+    const sma14   = calcSMA(closes, 14);
+    const ema26   = calcEMA(closes, 26);
+
+    import("chart.js/auto").then(({ default: Chart }) => {
+      if (!candleRef.current || !volumeRef.current) return;
+
+      const priceChart = new Chart(candleRef.current, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Price",
+              data: closes,
+              backgroundColor: candles.map((c: any) => c.close >= c.open ? "rgba(74,222,128,0.8)" : "rgba(248,113,113,0.8)"),
+              borderColor:     candles.map((c: any) => c.close >= c.open ? "#4ade80" : "#f87171"),
+              borderWidth: 1, borderRadius: 2,
+            },
+            { label: "SMA 14", data: sma14, type: "line" as any, borderColor: "#f5c542", borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
+            { label: "EMA 26", data: ema26, type: "line" as any, borderColor: "#60a5fa", borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { labels: { color: "rgba(255,255,255,0.6)", boxWidth: 12, font: { size: 11 } } },
+            tooltip: { backgroundColor: "#1a1a1a", borderColor: "rgba(255,255,255,0.1)", borderWidth: 1, titleColor: "#fff", bodyColor: "rgba(255,255,255,0.7)" },
+          },
+          scales: {
+            x: { ticks: { color: "rgba(255,255,255,0.4)", maxTicksLimit: 10, font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.05)" } },
+            y: { ticks: { color: "rgba(255,255,255,0.4)", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.05)" } },
+          },
+        },
+      });
+      chartRefs.current.push(priceChart);
+
+      const volChart = new Chart(volumeRef.current, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "Volume", data: volumes,
+            backgroundColor: candles.map((c: any) => c.close >= c.open ? "rgba(74,222,128,0.4)" : "rgba(248,113,113,0.4)"),
+            borderRadius: 2,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: "rgba(255,255,255,0.6)", boxWidth: 12, font: { size: 11 } } },
+            tooltip: { backgroundColor: "#1a1a1a", borderColor: "rgba(255,255,255,0.1)", borderWidth: 1, titleColor: "#fff", bodyColor: "rgba(255,255,255,0.7)", callbacks: { label: (ctx) => `Volume: ${Number(ctx.raw).toLocaleString()}` } },
+          },
+          scales: {
+            x: { ticks: { color: "rgba(255,255,255,0.4)", maxTicksLimit: 10, font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.05)" } },
+            y: { ticks: { color: "rgba(255,255,255,0.4)", font: { size: 10 }, callback: (v: any) => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : v }, grid: { color: "rgba(255,255,255,0.05)" } },
+          },
+        },
+      });
+      chartRefs.current.push(volChart);
+    });
+  }, [chartData]);
+
+  useEffect(() => {
+    return () => { chartRefs.current.forEach(c => { try { c?.destroy(); } catch {} }); };
+  }, []);
 
   return (
     <div>
       <Card style={{ marginBottom: 16 }}>
         <CardTitle>Stock Chart</CardTitle>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value.toUpperCase())}
-            onKeyDown={(e) => e.key === "Enter" && setSym(input)}
+          <input value={input} onChange={e => setInput(e.target.value.toUpperCase())}
+            onKeyDown={e => e.key === "Enter" && setSym(input)}
             placeholder="Symbol e.g. AAPL"
-            style={{ background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "9px 12px", color: "#fff", fontSize: 13, width: 180, outline: "none" }}
-          />
-          <button onClick={() => setSym(input)} style={{ background: "#4ade80", color: "#0d0d0d", border: "none", padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            style={{ background: "rgba(255,255,255,0.06)", border: "0.5px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "9px 12px", color: "#fff", fontSize: 13, width: 180, outline: "none" }} />
+          <button onClick={() => setSym(input)}
+            style={{ background: "#4ade80", color: "#0d0d0d", border: "none", padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
             Load Chart
           </button>
           <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>or press Enter</span>
         </div>
       </Card>
 
-      {loading && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, color: "rgba(255,255,255,0.4)" }}>
-          Loading chart…
-        </div>
-      )}
+      {loading && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, color: "rgba(255,255,255,0.4)" }}>Loading chart…</div>}
+      {error   && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, color: "#f87171" }}>{error}</div>}
 
-      {error && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, color: "#f87171" }}>
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Card>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>
-              {sym} — Price &nbsp;
-              <span style={{ color: "#f5c542" }}>● SMA 14</span> &nbsp;
-              <span style={{ color: "#60a5fa" }}>● EMA 26</span>
-            </div>
-            <div style={{ height: 320 }}><canvas ref={candleRef} /></div>
-          </Card>
-          <Card>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>Volume</div>
-            <div style={{ height: 140 }}><canvas ref={volumeRef} /></div>
-          </Card>
-        </div>
-      )}
+      {/* Always render canvases but hide when no data */}
+      <div style={{ display: chartData ? "flex" : "none", flexDirection: "column", gap: 16 }}>
+        <Card>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>
+            {sym} — Price &nbsp;
+            <span style={{ color: "#f5c542" }}>● SMA 14</span> &nbsp;
+            <span style={{ color: "#60a5fa" }}>● EMA 26</span>
+          </div>
+          <div style={{ position: "relative", height: 320 }}>
+            <canvas ref={candleRef} />
+          </div>
+        </Card>
+        <Card>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>Volume</div>
+          <div style={{ position: "relative", height: 140 }}>
+            <canvas ref={volumeRef} />
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -45,7 +45,13 @@ function linearRegression(prices, days = 7) {
     predictions.push(parseFloat((slope * (n - 1 + i) + intercept).toFixed(2)));
   }
 
-  return { slope: parseFloat(slope.toFixed(6)), intercept: parseFloat(intercept.toFixed(4)), r2: parseFloat(r2.toFixed(4)), predictions };
+  // Fitted line over historical data
+  const fittedSeries = [];
+  for (let i = 0; i < n; i++) {
+    fittedSeries.push(parseFloat((slope * i + intercept).toFixed(2)));
+  }
+
+  return { slope: parseFloat(slope.toFixed(6)), intercept: parseFloat(intercept.toFixed(4)), r2: parseFloat(r2.toFixed(4)), predictions, fittedSeries };
 }
 
 /**
