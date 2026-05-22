@@ -6,11 +6,14 @@ const connectDB = require("./utils/db");
 const { requireAuth, requireAdmin } = require("./middleware/auth");
 
 const authRoutes      = require("./routes/auth");
+const nepseRoutes     = require("./routes/nepse");
 const stockRoutes     = require("./routes/stocks");
 const portfolioRoutes = require("./routes/portfolio");
 const watchlistRoutes = require("./routes/watchlist");
 const analysisRoutes  = require("./routes/analysis");
 const adminRoutes     = require("./routes/admin");
+const alertRoutes       = require("./routes/alerts");
+const startAlertChecker = require("./utils/alertChecker");
 
 const app = express();
 
@@ -19,13 +22,16 @@ app.use(express.json());
 app.use(morgan("dev"));
 
 connectDB();
+startAlertChecker();
 
 app.use("/api/auth",      authRoutes);
+app.use("/api/nepse",     nepseRoutes);
 app.use("/api/stocks",    stockRoutes);
 app.use("/api/portfolio", requireAuth, portfolioRoutes);
 app.use("/api/watchlist", requireAuth, watchlistRoutes);
 app.use("/api/analysis",  requireAuth, analysisRoutes);
 app.use("/api/admin",     requireAuth, requireAdmin, adminRoutes);
+app.use("/api/alerts",   requireAuth, alertRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
