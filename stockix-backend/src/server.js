@@ -4,6 +4,7 @@ const cors    = require("cors");
 const morgan  = require("morgan");
 const connectDB = require("./utils/db");
 const { requireAuth, requireAdmin } = require("./middleware/auth");
+const predictionRoutes = require("./routes/prediction");
 
 const authRoutes      = require("./routes/auth");
 const nepseRoutes     = require("./routes/nepse");
@@ -32,6 +33,7 @@ app.use("/api/watchlist", requireAuth, watchlistRoutes);
 app.use("/api/analysis",  requireAuth, analysisRoutes);
 app.use("/api/admin",     requireAuth, requireAdmin, adminRoutes);
 app.use("/api/alerts",   requireAuth, alertRoutes);
+app.use("/api/prediction", requireAuth, predictionRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

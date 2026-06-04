@@ -1,50 +1,54 @@
 const cron  = require("node-cron");
 const Alert = require("../models/Alert");
+const User  = require("../models/User");
 const { getQuote } = require("./dataSource");
+const { sendAlertEmail } = require("./mailer");
 
-// Runs every 5 minutes while the server is on
-// "*/5 * * * *" means: every 5 minutes, every hour, every day
 function startAlertChecker() {
   cron.schedule("*/5 * * * *", async function() {
     try {
-      // Step 1: get all alerts that are still active
       var activeAlerts = await Alert.find({ isActive: true });
-
       if (activeAlerts.length === 0) return;
 
       console.log("[AlertChecker] Checking " + activeAlerts.length + " active alert(s)...");
 
-      // Step 2: check each alert one by one
       for (var i = 0; i < activeAlerts.length; i++) {
         var alert = activeAlerts[i];
-
         try {
-          // Step 3: get the live price for this stock
           var quote = await getQuote(alert.symbol);
           var livePrice = quote.c;
-
           if (!livePrice) continue;
 
-          // Step 4: check if the condition is met
           var triggered = false;
-          if (alert.condition === "below" && livePrice < alert.targetPrice) {
-            triggered = true;
-          }
-          if (alert.condition === "above" && livePrice > alert.targetPrice) {
-            triggered = true;
-          }
+          if (alert.condition === "below" && livePrice < alert.targetPrice) triggered = true;
+          if (alert.condition === "above" && livePrice > alert.targetPrice) triggered = true;
 
-          // Step 5: if triggered, update the alert in MongoDB
           if (triggered) {
-            alert.isTriggered   = true;
-            alert.isActive      = false;
+            alert.isTriggered    = true;
+            alert.isActive       = false;
             alert.triggeredPrice = livePrice;
-            alert.triggeredAt   = new Date();
+            alert.triggeredAt    = new Date();
             await alert.save();
 
-            console.log("[AlertChecker] TRIGGERED: " + alert.symbol + " is " + livePrice + " (condition: " + alert.condition + " " + alert.targetPrice + ")");
+            console.log("[AlertChecker] TRIGGERED: " + alert.symbol + " is " + livePrice);
+
+            // Send email to the user
+            try {
+              var user = await User.findById(alert.userId).select("email");
+              if (user && user.email) {
+                await sendAlertEmail(user.email, {
+                  symbol:         alert.symbol,
+                  condition:      alert.condition,
+                  targetPrice:    alert.targetPrice,
+                  triggeredPrice: livePrice,
+                });
+              }
+            } catch (emailErr) {
+              console.error("[AlertChecker] Email failed:", emailErr.message);
+            }
+
           } else {
-            console.log("[AlertChecker] " + alert.symbol + " is " + livePrice + " -- not triggered yet (condition: " + alert.condition + " " + alert.targetPrice + ")");
+            console.log("[AlertChecker] " + alert.symbol + " is " + livePrice + " -- not triggered yet");
           }
 
         } catch (err) {
