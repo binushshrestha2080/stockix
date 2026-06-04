@@ -27,9 +27,17 @@ A full-stack stock monitoring platform with real-time prices, technical analysis
 
 ## 🖥️ Screenshots
 
-| Dashboard | Analysis | Price Alerts |
-|---|---|---|
-| Live portfolio summary, watchlist, news | RSI, MACD, SMA/EMA charts | Sentence-style alert creation |
+**Dashboard** — Live portfolio summary, watchlist with sparklines, and latest market news
+![Dashboard](dashboard.png)
+
+**Technical Analysis** — Linear Regression, SMA, EMA, RSI, MACD with overall sentiment score
+![Analysis](analysis.png)
+
+**Price Alerts** — Sentence-style alert creation with triggered alert history
+![Alerts](alerts.png)
+
+**Email Notification** — HTML alert email sent automatically when a price target is hit
+![Email](email.png)
 
 ---
 
