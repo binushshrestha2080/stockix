@@ -247,5 +247,3 @@ stockix-frontend/
 - Input validation on all POST/PUT routes
 - `.env` excluded from git
 
----
-
