@@ -249,10 +249,3 @@ stockix-frontend/
 
 ---
 
-## 📄 License
-
-MIT
-
----
-
-*Built with ❤️ using Node.js, Next.js, Python, and TensorFlow*
